@@ -14,7 +14,7 @@ namespace app
         return dist6(rng);
     }
 
-    std::string rand_str()
+    std::vector<uint8_t> rand_str()
     {
         int size = rnd(1, 5);
         const int MAX = 26;
@@ -22,9 +22,21 @@ namespace app
                             'h', 'i', 'j', 'k', 'l', 'm', 'n',
                             'o', 'p', 'q', 'r', 's', 't', 'u',
                             'v', 'w', 'x', 'y', 'z' };
-        std::string result;
+        std::vector<uint8_t> result;
         for (int i = 0; i < size; ++i)
-            result += alpha[rnd(1, MAX-1)];
+            result.push_back(alpha[rnd(1, MAX-1)]);
+
+        return result;
+    }
+
+    std::vector<uint8_t> rand_tlv_msg()
+    {
+        std::string msg_name = MSG_NAMES[rnd(1, MSG_NAMES.size() - 1)];
+        uint8_t descr_param = static_cast<uint8_t>(rnd(1, 1)); //to 23, but 1 to 1 cuz only 1 implemented
+        std::vector<uint8_t> result;
+        result.push_back(descr_param);
+        for(int i = 0; i < 3; ++i)
+            result.push_back(msg_name.at(i));
 
         return result;
     }
@@ -60,9 +72,9 @@ namespace app
 
     tlv create_rnd_tlv()
     {
-        std::string value = rand_str();
+        std::vector<uint8_t> value = rand_str();
         std::string bytes = rand_tag_bytes();
-        tlv packet{create_tag(bytes), static_cast<uint16_t>(value.length() + 1), value.data()};
+        tlv packet{create_tag(bytes), static_cast<uint16_t>(value.size()), value};
         return packet;
     }
 }

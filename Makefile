@@ -1,2 +1,8 @@
 all:
-	g++ -g -Wall main.cpp helpers.cpp tlv.cpp vtk.cpp -o out
+	cd build && cmake .. && make
+
+run:
+	cd build && ./vtk
+
+leak-check:
+	cd build && valgrind --leak-check=full ./vtk

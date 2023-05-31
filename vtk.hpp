@@ -12,7 +12,7 @@ namespace app
     {
         VMC = 0x96FB,
         POS = 0x97FB,
-        UNKNOWN_DESCR = 0x00
+        UNKNOWN_DESCR = 0x0
     };
 
     std::string desc_to_string(descriminator t);
@@ -29,9 +29,7 @@ namespace app
     private:
         uint16_t _length = 0;
         descriminator _descr = UNKNOWN_DESCR;
-        std::vector<tlv> _tlv_packets{};     
-        //TODO: list of parameters in tag
-        //TODO: tvl in tvl
+        std::vector<tlv> _tlv_packets{};
     };
 
     //Doesnt implemented

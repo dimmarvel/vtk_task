@@ -1,11 +1,12 @@
 #include "tlv.hpp"
+#include "helpers.hpp"
 #include <bitset>
 #include <iostream>
 
 namespace app
 {
 
-    tlv::tlv(uint16_t tag, uint16_t length, const std::string& value)
+    tlv::tlv(uint16_t tag, uint16_t length, const std::vector<uint8_t>& value)
     :
     _tag(tag),
     _length(length),
@@ -19,19 +20,20 @@ namespace app
 
         if(is_2byte_tag(*tag1b))
         {
-            fwrite(tag1b, sizeof(uint8_t), 1, file);
-            fwrite(tag2b, sizeof(uint8_t), 1, file);
+            std::fwrite(tag1b, sizeof(uint8_t), 1, file);
+            std::fwrite(tag2b, sizeof(uint8_t), 1, file);
         }
         else
         {
             if(*tag1b == 0)
-                fwrite(tag2b, sizeof(uint8_t), 1, file);
+                std::fwrite(tag2b, sizeof(uint8_t), 1, file);
             else
-                fwrite(tag1b, sizeof(uint8_t), 1, file);
+                std::fwrite(tag1b, sizeof(uint8_t), 1, file);
         }
         
-        fwrite(&_length, sizeof(uint16_t), 1, file);
-        fwrite(_value.data(), sizeof(char), (size_t)_length, file);
+        std::fwrite(&_length, sizeof(uint16_t), 1, file);
+        std::fwrite(_value.data(), sizeof(char), (size_t)_length, file);
+
     }
     
     void tlv::read(FILE* file)
@@ -53,16 +55,35 @@ namespace app
         std::fread(&_length, sizeof(uint16_t), 1, file);
         char buff[_length];
         std::fread(buff, sizeof(char), (size_t)_length, file);
-        _value = buff;
+        _value.assign(buff, buff + _length);
     }
 
     std::string tlv::info()
     {
         tag_descr td = tag_info();
-        return "\n\ttlv {" + 
-                td.info() + ", " +
-                "length {" + std::to_string(_length) + "}, " +
-                "value {" + _value + "}}";
+        std::string result = 
+            "\n\ttlv {" + 
+            td.info() + ", " +
+            "length {" + std::to_string(_length) + "}, " +
+            "value {";
+
+        for(size_t i = 0; i < _value.size(); ++i)
+        {
+            descr_handler dh = param_to_string(_value.at(i));
+            if(!dh.first.empty())
+            {
+                std::string str = dh.second(*this, i);
+                result += dh.first + "{" + str + "}";
+            }
+            else // Different formats can be considered invalid or further written simply character by character
+            {
+                result.push_back(_value[i]);
+            }
+        }
+        
+        result += "}}";
+        
+        return result;
     }
 
     tag_descr tlv::tag_info()
@@ -123,6 +144,23 @@ namespace app
             default:
                 return "unknown";
         }
+    }
+
+
+    std::string tlv::handle_0x01(size_t& i) const
+    {
+        std::string tmp;
+        for(int j = 0; j < 3; ++j) 
+            tmp.push_back(_value[++i]);
+        return tmp;
+    }
+
+    descr_handler param_to_string(uint8_t id)
+    {
+        auto param = DESCR_PARAMS.find(id);
+        return (param != DESCR_PARAMS.end()) ? 
+                param->second : 
+                std::make_pair<std::string, handler>("", EMPTY_HANDLER);
     }
 
     bool is_2byte_tag(uint8_t tag)
