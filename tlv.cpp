@@ -1,172 +1,167 @@
 #include "tlv.hpp"
-#include "helpers.hpp"
-#include <bitset>
+#include <cstdio>
 #include <iostream>
+#include <bitset>
+#include <utility>
+#include <functional>
 
-namespace app
-{
+namespace app {
+        
+    bool is_eof(FILE* file)
+    {
+        getc(file);
+        if(feof(file)) return true;
+        fseek(file, -1, SEEK_CUR);
+        return false;
+    }
 
-    tlv::tlv(uint16_t tag, uint16_t length, const std::vector<uint8_t>& value)
-    :
-    _tag(tag),
-    _length(length),
-    _value(value)
+    tlv_parser::tlv_parser(FILE* file) : _file(file)
     {}
 
-    void tlv::write(FILE* file)
-    {
-        uint8_t* tag1b = ((uint8_t*)&_tag) + 1;
-        uint8_t* tag2b = ((uint8_t*)&_tag);
+    tlv_parser::~tlv_parser()
+    {}
 
-        if(is_2byte_tag(*tag1b))
+    tlv::~tlv()
+    {
+        tag.clear();
+        value.clear();
+        len.buff.clear();
+    }
+
+    uint8_t tlv_parser::read_byte()
+    {
+        uint8_t d1;
+        SAFE_READ(&d1, sizeof(uint8_t), 1, _file);
+        return d1;
+    }
+
+    std::vector<tlv> tlv_parser::parse_nested(const std::vector<uint8_t>& tag)
+    {
+        //Doesnt mplement
+        std::vector<tlv> f; 
+        return f;
+    }
+
+    std::vector<tlv> tlv_parser::parse_primitive(const std::vector<uint8_t>& tag)
+    {
+        std::vector<tlv> tlvs;
+        tlv t;
+        t.tag = std::move(tag);
+        t.len = read_length();
+        t.value = read_value(t.len.size);
+        tlvs.emplace_back(t);
+
+        while(!is_eof(_file))
         {
-            std::fwrite(tag1b, sizeof(uint8_t), 1, file);
-            std::fwrite(tag2b, sizeof(uint8_t), 1, file);
+            t.tag = read_tag();
+            t.len = read_length();
+            t.value = read_value(t.len.size);
+            tlvs.emplace_back(t);
         }
+        
+        return tlvs;
+    }
+
+    std::vector<tlv> tlv_parser::parse()
+    {
+        std::vector<uint8_t> tag = read_tag();
+
+        if ((tag[0] & 0x20) != 0x20)
+            return parse_primitive(tag);
+        return parse_nested(tag);
+    }
+
+    std::vector<uint8_t> tlv_parser::read_tag()
+    {
+        std::vector<uint8_t> tag; 
+        tag.push_back(read_byte());
+        if ((tag[tag.size()-1] & 0x1F) == 0x1F) 
+        {
+            tag.push_back(read_byte());
+            while (((tag[tag.size()-1] >> 7) & 0x01) == 1)
+            {
+                if(tag.size() == 3)
+                    throw std::runtime_error("Error tag parsing more than 3 bytes");
+                tag.push_back(read_byte());
+            }
+        } 
+        return tag;
+    }
+
+    length tlv_parser::read_length_size()
+    {
+        length len;
+        len.buff.push_back(read_byte());
+        len.size = 1;
+
+        if (((len.buff[0] >> 7) & 0x01) == 0x01)
+        {
+            if (len.buff.size()-1 == 3)
+                throw std::runtime_error("Error length parsing more than 3 bytes");
+            len.size = (len.buff[0] & 0x7F);
+        }
+
+        return len;
+    }
+
+    length tlv_parser::read_length()
+    {
+        length len = std::move(read_length_size());
+
+        if(len.buff.empty())
+            throw std::runtime_error("Length is empty");
+
+        if (len.buff[0] == 0x80)
+            throw std::runtime_error("Invalid length = 0x80");
+
+        if (len.buff[0] < 0x80)
+        {
+            len.size = len.buff[0] & 0x7F;
+            return len;
+        }
+
+        for(uint16_t i = 0; i < len.size; ++i)
+            len.buff.push_back(read_byte());
+
+        uint16_t sz = 0;
+        if(len.size == 1)
+            sz =    len.buff[0] & 0xFF;
+        else if(len.size == 2)
+            sz =    ((len.buff[1] & 0xFF) << 8) | 
+                    (len.buff[2] & 0xFF);
+        else if(len.size == 3)
+            sz =    ((len.buff[1] & 0xFF) << 8) | 
+                    (len.buff[2] & 0xFF);
         else
+            throw std::runtime_error("Invalid length > 3 bytes");
+        len.size = sz;
+
+        return len;
+    }
+
+    std::vector<uint8_t> tlv_parser::read_value(const uint16_t size)
+    {
+        std::vector<uint8_t> value;
+        value.resize(size);
+        //Do safe for read out of range
+        SAFE_READ(&value[0], sizeof(uint8_t), size, _file);
+        return value;
+    }
+
+    uint32_t tlv::get_tag_number()
+    {
+        if(tag.empty())
+            throw std::runtime_error("Tag is empty");
+
+        uint32_t tag_number = tag[0];
+        if((tag[0] & 0x1F) == 0x1F && tag.size() > 1)
         {
-            if(*tag1b == 0)
-                std::fwrite(tag2b, sizeof(uint8_t), 1, file);
-            else
-                std::fwrite(tag1b, sizeof(uint8_t), 1, file);
+            tag_number = (tag_number << 8) | tag[1];
+            if(tag.size() == 3)
+                tag_number = (tag_number << 8) | tag[2];
         }
         
-        std::fwrite(&_length, sizeof(uint16_t), 1, file);
-        std::fwrite(_value.data(), sizeof(char), (size_t)_length, file);
-
-    }
-    
-    void tlv::read(FILE* file)
-    {
-        uint8_t tag1b;
-        std::fread(&tag1b, sizeof(uint8_t), 1, file);
-        
-        if(is_2byte_tag(tag1b))
-        {
-            uint8_t tag2b;
-            std::fread(&tag2b, sizeof(uint8_t), 1, file);
-            _tag = ((uint16_t)tag1b << 8) | tag2b;
-        }
-        else
-        {
-            _tag |= tag1b;
-        }
-
-        std::fread(&_length, sizeof(uint16_t), 1, file);
-        char buff[_length];
-        std::fread(buff, sizeof(char), (size_t)_length, file);
-        _value.assign(buff, buff + _length);
-    }
-
-    std::string tlv::info()
-    {
-        tag_descr td = tag_info();
-        std::string result = 
-            "\n\ttlv {" + 
-            td.info() + ", " +
-            "length {" + std::to_string(_length) + "}, " +
-            "value {";
-
-        for(size_t i = 0; i < _value.size(); ++i)
-        {
-            descr_handler dh = param_to_string(_value.at(i));
-            if(!dh.first.empty())
-            {
-                std::string str = dh.second(*this, i);
-                result += dh.first + "{" + str + "}";
-            }
-            else // Different formats can be considered invalid or further written simply character by character
-            {
-                result.push_back(_value[i]);
-            }
-        }
-        
-        result += "}}";
-        
-        return result;
-    }
-
-    tag_descr tlv::tag_info()
-    {
-        tag_descr td;
-        uint8_t *tag1b = ((uint8_t *)&_tag) + 1;
-        uint8_t *tag2b = ((uint8_t *)&_tag);
-        if(is_2byte_tag(*tag1b))
-        {
-            td.number = ((uint16_t)((*tag1b) & ~0xE0) << 8) | (*tag2b); // set 0 first 3 bit and write to one number
-            td.type = is_bit(*tag1b, 5);
-            td.b2 = get_tag_2b(*tag2b);
-        }
-        else
-        {
-            if(*tag1b == 0)
-            {
-                td.number |= *tag2b;
-                td.type = is_bit(*tag2b, 5);
-                td.b2 = get_tag_2b(*tag2b);
-            }
-            else
-            {
-                td.number |= *tag1b;
-                td.type = is_bit(*tag1b, 5);
-                td.b2 = get_tag_2b(*tag1b);
-            }
-        }
-
-        return td;
-    }
-
-    tag_2b tlv::get_tag_2b(uint8_t t)
-    {
-        if((t >> 6)         == UNIVERSAL)   return UNIVERSAL;
-        if((APPLIED & t)    == APPLIED)     return APPLIED;
-        if((PRIVATE & t)    == PRIVATE)     return PRIVATE;
-        if((CONTEXT_SENSITIVE & t) == CONTEXT_SENSITIVE) return CONTEXT_SENSITIVE;
-        return UNKNOWN_TAG;
-    }
-
-    std::string tag_descr::info()
-    {
-        return  "tag{class:" + tag_to_string(b2) + 
-                ", type:" + std::to_string(type) + 
-                ", number:" + std::to_string(number) + "(" + std::bitset<16>(number).to_string() + ")" + 
-                "}";
-    }
-
-    std::string tag_to_string(tag_2b t)
-    {
-        switch (t)
-        {
-            case UNIVERSAL:         return "universal";
-            case APPLIED:           return "applied";
-            case CONTEXT_SENSITIVE: return "context sensitive";
-            case PRIVATE:           return "private";
-            default:
-                return "unknown";
-        }
-    }
-
-
-    std::string tlv::handle_0x01(size_t& i) const
-    {
-        std::string tmp;
-        for(int j = 0; j < 3; ++j) 
-            tmp.push_back(_value[++i]);
-        return tmp;
-    }
-
-    descr_handler param_to_string(uint8_t id)
-    {
-        auto param = DESCR_PARAMS.find(id);
-        return (param != DESCR_PARAMS.end()) ? 
-                param->second : 
-                std::make_pair<std::string, handler>("", EMPTY_HANDLER);
-    }
-
-    bool is_2byte_tag(uint8_t tag)
-    {
-        uint8_t mask = (1 << 5) - 1;
-        return (mask & tag) == mask;
+        return tag_number;
     }
 
 }

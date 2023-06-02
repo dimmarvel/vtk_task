@@ -1,98 +1,61 @@
 #pragma once
-#include <cstdio>
 #include <cstdint>
 #include <string>
 #include <vector>
-#include <functional>
-#include <unordered_map>
+#include <map>
+
+constexpr std::size_t MAX_LNGTH = 65535;
 
 namespace app
 {
-    class tlv;
-    typedef std::function<std::string(const tlv&, size_t&)> handler;
-    typedef std::pair<std::string, handler> descr_handler;
+    #define SAFE_READ(data, byte_size, size, file)  \
+        if(!std::fread(data, byte_size, size, file)) \
+            throw std::runtime_error("Fail read file")
 
-    enum tag_2b : uint8_t
+    struct length
     {
-        UNIVERSAL = 0x0,
-        APPLIED = 0x40,
-        CONTEXT_SENSITIVE = 0x80,
-        PRIVATE = 0xC0,
-        UNKNOWN_TAG = 0xFF
+        std::vector<uint8_t> buff;
+        uint16_t size;
+    };
+    
+    struct tlv
+    {
+        std::vector<uint8_t>    tag;
+        length                  len;
+        std::vector<uint8_t>    value;
+        
+        tlv() = default;
+        tlv(const tlv&) = default;
+        tlv& operator=(const tlv&) = default;
+        ~tlv();
+
+        uint32_t get_tag_number();
     };
 
-    std::string tag_to_string(tag_2b t);
-    std::string vtk_stringify(uint8_t id);
-    bool is_2byte_tag(uint8_t tag);
-    descr_handler param_to_string(uint8_t id);
-
-    template<typename T>
-    bool is_bit(T t, uint16_t pos)
-    {
-        return (t & (1 << pos)) ? true : false;
-    }
-
-    struct tag_descr
-    {
-        tag_2b b2 = UNKNOWN_TAG;
-        bool type; //Package nesting is not implemented
-        uint16_t number;
-
-        std::string info();
-    };
-
-    class tlv
+    class tlv_parser
     {
     public:
-        tlv() = default;
-        tlv(uint16_t tag, uint16_t length, const std::vector<uint8_t>& value);
+        tlv_parser(FILE* file);
+        ~tlv_parser();
 
-        void write(FILE* file);
-        void read(FILE* file);
-        std::string info();
+    public:
+        std::vector<tlv> parse();
 
-        //Return description
-        std::string handle_0x01(size_t& i) const;
-        std::string empty_handler(size_t& i) const { return ""; }
+        std::vector<uint8_t> read_tag();
+        //Complete length with one byte
+        length read_length();
+        std::vector<uint8_t> read_value(const uint16_t size);
+
+        std::vector<tlv> parse_nested(const std::vector<uint8_t>& tag);
+        std::vector<tlv> parse_primitive(const std::vector<uint8_t>& tag);
+        
+    private:
+        uint8_t read_byte();
+        //Return incomplite length, only first byte
+        length read_length_size();
 
     private:
-        tag_descr tag_info();
-        tag_2b get_tag_2b(uint8_t t);
-
-
-    private:
-        uint16_t _tag = 0;
-        uint16_t _length = 0;
-        std::vector<uint8_t> _value{};
+        FILE* _file;
     };
 
-    // Empty handler need implement
-    #define EMPTY_HANDLER &tlv::empty_handler
-    static const std::unordered_map<uint8_t, descr_handler> DESCR_PARAMS = 
-    {
-        { 0x01, {"Message name", &tlv::handle_0x01}},
-        { 0x03, {"Operation number", EMPTY_HANDLER}}, 
-        { 0x04, {"Amount in minor currency unit", EMPTY_HANDLER}}, 
-        { 0x05, {"Keepalive interval in seconds", EMPTY_HANDLER}}, 
-        { 0x06, {"Operation timeout in seconds", EMPTY_HANDLER}}, 
-        { 0x07, {"Event name", EMPTY_HANDLER}},
-        { 0x08, {"Event number", EMPTY_HANDLER}}, 
-        { 0x09, {"Product id", EMPTY_HANDLER}}, 
-        { 0x0A, {"QR-Code data", EMPTY_HANDLER}}, 
-        { 0x0B, {"TCP/IP destination", EMPTY_HANDLER}}, 
-        { 0x0C, {"Outgoing byte counter", EMPTY_HANDLER}}, 
-        { 0x0D, {"Simple data block", EMPTY_HANDLER}}, 
-        { 0x0E, {"Confirmable data block", EMPTY_HANDLER}}, 
-        { 0x0F, {"Product name", EMPTY_HANDLER}}, 
-        { 0x10, {"POS management data", EMPTY_HANDLER}}, 
-        { 0x11, {"Local time", EMPTY_HANDLER}}, 
-        { 0x12, {"System information", EMPTY_HANDLER}}, 
-        { 0x13, {"Banking receipt", EMPTY_HANDLER}}, 
-        { 0x14, {"Display time in milliseconds", EMPTY_HANDLER}}, 
-        { 0x15, {"Image name", EMPTY_HANDLER}},
-        { 0x16, {"Image flags", EMPTY_HANDLER}}, 
-        { 0x17, {"Display text", EMPTY_HANDLER}}, 
-        { 0x18, {"Coordinates and color", EMPTY_HANDLER}}, 
-        { 0x19, {"Host Id", EMPTY_HANDLER}}
-    };
 }

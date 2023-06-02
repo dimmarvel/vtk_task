@@ -1,17 +1,12 @@
 # How run
+### !!! Change root_dir in cofig.txt file !!!
 
-## Build:
 ```
-1. mkdir build
-2. make
-3. make run
+1. make
+2. ./out <path_to_config> - or without argument, then will use config in current folder
 ```
-![run](run.png)
-------
-## Valgrind leak check
+# Tests
 ```
-1. Do build
-2. make leak-check
+1. make build-tests
+2. ./tests
 ```
-![leaks](leaks.png)
-

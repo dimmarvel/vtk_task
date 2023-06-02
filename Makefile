@@ -1,8 +1,5 @@
 all:
-	cd build && cmake .. && make
+	g++ -g -Wall main.cpp tlv.cpp app.cpp -o out
 
-run:
-	cd build && ./vtk
-
-leak-check:
-	cd build && valgrind --leak-check=full ./vtk
+build-tests:
+	g++ -g -Wall main.cpp tlv.cpp app.cpp -o tests
