@@ -8,21 +8,24 @@ namespace api
     {
         VMC = (1 << 0),
         POS = (1 << 1),
-        UNKNOWN = (1 << 2)
+        UNKNOWN_SOURCE = (1 << 2)
     };
 
-    enum TAG_TYPE : uint8_t
+    enum tag_type : uint8_t
     {
-        T1 = 0x1,
-        T2 = 0x2
+        UNIVERSAL = 0x0,
+        APPLIED = 0x40,
+        CONTEXT_SENSITIVE = 0x80,
+        PRIVATE = 0xC0,
+        UNKNOWN_TAG = 0xFF
     };
-    
+
     struct params_info
     {
         std::string descr;
         std::string format;
         uint8_t max_length = 0;
-        source src = UNKNOWN;
+        source src = UNKNOWN_SOURCE;
     };
 
     #define NO_LIMIT UINT8_MAX
