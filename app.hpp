@@ -14,6 +14,7 @@ namespace app
 
         application(const application& copy) = delete;
         application& operator=(const application& copy) = delete;
+        
     private:
         std::string _path;
         FILE* _file;
