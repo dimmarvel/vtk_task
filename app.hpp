@@ -1,11 +1,7 @@
 #pragma once
 #include <string>
 #include <memory>
-
-namespace app::parser
-{
-    class tlv_parser;
-}
+#include "vtk_parser.hpp"
 
 namespace app
 {
@@ -23,6 +19,6 @@ namespace app
 
     private:
         std::string _path;
-        std::shared_ptr<parser::tlv_parser> _tlv_parser;
+        std::unique_ptr<parser::vtk_parser> _vtk_parser;
     };
 }

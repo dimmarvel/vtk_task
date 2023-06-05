@@ -1,6 +1,5 @@
 #include "tlv.hpp"
 #include "helpers.hpp"
-#include <cstdio>
 #include <iostream>
 
 namespace app {
@@ -28,12 +27,11 @@ namespace app {
         return tag_number;
     }
 
-    void tlv::info()
+    std::string tlv::info()
     {
-        std::cout << "tlv { tag: 0x" << std::hex << get_tag_number();
-        std::cout.unsetf(std::ios::hex);
-        std::cout << ", length: " << len.size << ", value: ";
-        cout_vec_uint8_hex(value);
-        std::cout << " }\n";
+        return std::string("tlv { tag: " + utils::int_to_hex(get_tag_number())
+        + ", length: " + std::to_string(len.size) + ", value: "
+        + utils::cout_vec_uint8_hex(value)
+        + " }");
     }
 }

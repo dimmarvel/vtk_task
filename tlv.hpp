@@ -21,6 +21,6 @@ namespace app
         uint32_t get_tag_number();
         bool is_nested() { return (tag.at(0)) & (1<<(5)); }
         static bool is_primitive_tag(const uint8_t& t) { return ((t & 0x20) != 0x20); }
-        void info();
+        std::string info();
     };
 }
